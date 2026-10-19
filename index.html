@@ -121,7 +121,7 @@
         <span class="logo-badge">CRA</span>
         <h1>Occitanie — Football Américain - Visuel Calendrier et Désignations AP - saison 2026-2027</h1>
       </div>
-      <span style="font-size: 0.85rem; opacity: 0.9;">Espace réservé désignations</span>
+      <span style="font-size: 0.85rem; opacity: 0.9;">Espace réservé répartiteurs</span>
     </div>
   </header>
 
@@ -178,7 +178,7 @@
       <div class="contact-card">
         <h2 style="font-size: 1.25rem; margin-bottom: 0.5rem; color: var(--primary-dark);">Transmettre une demande à la CRA</h2>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem;">
-          Toute modification sur le calendrier est effectuée par l'administrateur. Remplissez ce formulaire pour envoyer directement un e-mail pré-rempli.
+          Toute modification sur le calendrier est effectuée par un répartiteur. Remplissez ce formulaire pour envoyer directement un e-mail pré-rempli.
         </p>
 
         <form onsubmit="sendEmail(event)">
@@ -190,7 +190,7 @@
           <div class="form-group">
             <label for="contact-type">Objet de votre demande</label>
             <select id="contact-type" onchange="toggleMatchSelect(this.value)" required>
-              <option value="UNAVAIL">Je suis indisponible</option>
+              <option value="UNAVAIL">Je suis indisponible pour cette ou ces dates</option>
               <option value="ASSIGN">Je veux arbitrer un match</option>
             </select>
           </div>
@@ -216,7 +216,7 @@
   <script>
     // SCRIPT DE SYNCHRONISATION GOOGLE SHEETS
     // Remplacer l'URL ci-dessous par l'URL d'export CSV de votre feuille Google Sheets publiée
-    const GOOGLE_SHEETS_CSV_URL = ""; 
+    const GOOGLE_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRypW_JLd6gUusSfC9MG937kuKvr1sXNfbNudAI6wUnV97OPJzgMPyF37QLdUS0jin1m20_tpU0PdKs/pub?gid=1&single=true&output=csv"; 
 
     // Données de démonstration (utilisées par défaut avant connexion au Google Sheet)
     let matchesData = [
@@ -278,51 +278,74 @@
         </svg>
         Non attribué
       </span>`;
+    // Analyse du fichier CSV
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  
+  // Récupération des en-têtes
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"(.*)"$/, '$1'));
+  const data = [];
 
-    // Chargement dynamique des données depuis Google Sheets si URL configurée
-    async function fetchGoogleSheetsData() {
-      if (!GOOGLE_SHEETS_CSV_URL) return;
-      try {
-        const response = await fetch(GOOGLE_SHEETS_CSV_URL);
-        const csvText = await response.text();
-        // Transformation simple du CSV en objet JSON
-        const rows = csvText.split('\n').map(row => row.split(','));
-        // Reconstitution de matchesData...
-      } catch (err) {
-        console.warn("Impossible de charger le Google Sheet, utilisation des données locales.", err);
-      }
-    }
+  for (let i = 1; i < lines.length; i++) {
+    // Gestion des guillemets dans le CSV
+    const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'));
+    if (row.length < headers.length) continue;
 
-    // Obtenir la classe CSS associée à la division
-    function getDivisionClass(div) {
-      switch(div.toUpperCase()) {
-        case 'D2': return 'd2';
-        case 'RÉGIONAL': 
-        case 'REGIONAL': return 'regional';
-        case 'U18': return 'u18';
-        case 'U16': return 'u16';
-        default: return 'd2';
-      }
-    }
+    // Association par colonne Google Sheets
+    // Adaptez les noms si vos colonnes Google Sheets diffèrent
+    const date = row[3] || "";
+    const division = row[4] || "";
+    const time = row[5] || "";
+    const home = row[6] || "";
+    const away = row[7] || "";
+    const stadium = row[8] || "";
+    const referee = row[9] || "";
 
-    // Initialisation des filtres d'arbitres
-    function populateRefFilter() {
-      const select = document.getElementById('ref-filter');
-      const referees = new Set();
-      
-      matchesData.forEach(m => {
-        if (m.referee && m.referee.trim() !== "") {
-          referees.add(m.referee.trim());
-        }
-      });
-
-      referees.forEach(ref => {
-        const opt = document.createElement('option');
-        opt.value = ref;
-        opt.textContent = `Arbitre : ${ref}`;
-        select.appendChild(opt);
+    // On ne conserve que les lignes correspondant à un vrai match
+    if (home !== "" && home !== "Locaux") {
+      data.push({
+        id: i,
+        division: division || "D2",
+        home: home,
+        away: away,
+        date: date,
+        time: time,
+        stadium: stadium,
+        referee: referee,
+        contactHome: "Contact club hôte",
+        contactAway: "Contact club visiteur"
       });
     }
+  }
+  return data;
+}
+
+// Chargement et rafraîchissement dynamique des données
+async function loadCalendarData() {
+  if (!GOOGLE_SHEETS_CSV_URL) {
+    // Si pas d'URL configurée, charger les données de test
+    populateRefFilter();
+    renderViews(matchesData);
+    return;
+  }
+
+  try {
+    const response = await fetch(GOOGLE_SHEETS_CSV_URL);
+    const csvText = await response.text();
+    const fetchedMatches = parseCSV(csvText);
+
+    if (fetchedMatches.length > 0) {
+      matchesData = fetchedMatches;
+    }
+  } catch (err) {
+    console.warn("Erreur lors du chargement Google Sheets, repli sur données locales :", err);
+  } finally {
+    populateRefFilter();
+    renderViews(matchesData);
+  }
+}
+
 
     // Affichage des données
     function renderViews(filteredMatches) {
@@ -450,10 +473,10 @@
 
       window.location.href = `mailto:${adminEmail}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
     }
-
-    // Initialisation
-    populateRefFilter();
-    renderViews(matchesData);
+// Lancement propre au chargement complet du DOM
+    document.addEventListener('DOMContentLoaded', () => {
+      loadCalendarData();
+    });
   </script>
 </body>
 </html>
