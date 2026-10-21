@@ -104,6 +104,10 @@
     .btn-submit { width: 100%; background-color: var(--primary); color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: background 0.2s; }
     .btn-submit:hover { background-color: #1e40af; }
 
+    /* Contact Details Formatting */
+    .contact-block { margin-top: 4px; }
+    .contact-block strong { color: var(--primary-dark); }
+
     /* Responsive */
     @media (max-width: 768px) {
       .top-bar { flex-direction: column; align-items: stretch; }
@@ -139,7 +143,6 @@
         <select id="ref-filter" onchange="applyFilter(this.value)">
           <option value="ALL">Tous les matchs</option>
           <option value="UNASSIGNED">Matchs non attribués uniquement</option>
-          <!-- Les arbitres seront ajoutés dynamiquement -->
         </select>
       </div>
     </div>
@@ -156,7 +159,6 @@
               <th>Rencontre (Locaux vs Visiteurs)</th>
               <th>Lieu (Stade)</th>
               <th>Arbitre Principal</th>
-              <th>Contacts Équipes</th>
             </tr>
           </thead>
           <tbody id="table-body">
@@ -213,14 +215,15 @@
     </section>
   </main>
 
- <script>
+  <script>
     // URL de votre fichier Google Sheets publié en CSV
     const GOOGLE_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRypW_JLd6gUusSfC9MG937kuKvr1sXNfbNudAI6wUnV97OPJzgMPyF37QLdUS0jin1m20_tpU0PdKs/pub?gid=1&single=true&output=csv"; 
     const GOOGLE_SHEETS_EQUIPE_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRypW_JLd6gUusSfC9MG937kuKvr1sXNfbNudAI6wUnV97OPJzgMPyF37QLdUS0jin1m20_tpU0PdKs/pub?gid=642104858&single=true&output=csv";
-    // Données de secours (affichées si Google Sheets est inaccessible)
-    let matchesData = [ ];
-    let teamsContactMap = {};
-    // SVG de l'icône Buste d'homme barré (Match sans arbitre)
+
+    // Données de secours
+    let matchesData = [];
+    let teamsContactsMap = {}; // Correction du nom de variable avec 's'
+
     const iconNoRef = `
       <span class="no-ref-badge" title="Aucun arbitre désigné">
         <svg viewBox="0 0 24 24">
@@ -228,12 +231,11 @@
         </svg>
         Non attribué
       </span>`;
-    // Analyse générique d'un texte CSV en lignes
+
     function splitCSVLines(text) {
       return text.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
     }
 
-    // Analyse de la grille d'équipes (où les noms d'équipes sont en colonnes)
     function parseEquipesCSV(csvText) {
       const lines = splitCSVLines(csvText);
       if (lines.length < 2) return {};
@@ -241,8 +243,6 @@
       const map = {};
       const headers = lines[0].split(',').map(h => h.trim().replace(/^"(.*)"$/, '$1').replace(/^﻿/, ''));
 
-      // Index 0: Equipe (Adresse, Personne, Mail, Tel)
-      // On va repérer la ligne 'Peronnse à contacter équipe', 'Mail équipe', 'Tel Equipe'
       let nameRowIdx = -1, mailRowIdx = -1, telRowIdx = -1;
 
       for (let i = 1; i < lines.length; i++) {
@@ -254,7 +254,6 @@
         else if (label.includes('tel')) telRowIdx = i;
       }
 
-      // Parcourir chaque colonne d'équipe
       for (let col = 1; col < headers.length; col++) {
         const teamName = headers[col];
         if (!teamName) continue;
@@ -274,7 +273,6 @@
           tel = row[col] || "";
         }
 
-        // Nettoyage des valeurs invalides
         if (contactName === "#N/A") contactName = "";
         if (mail === "#N/A") mail = "";
         if (tel === "#N/A") tel = "";
@@ -288,7 +286,6 @@
       return map;
     }
 
-    // Recherche souple du contact d'une équipe par son nom
     function getTeamContactHtml(teamName) {
       if (!teamName) return "<em>Non renseigné</em>";
       
@@ -308,16 +305,16 @@
 
       return details ? `<strong>${teamName}</strong> : ${details}` : `<strong>${teamName}</strong> : <em>Non renseigné</em>`;
     }
-    // 1. Analyse robuste du CSV
-    function parseCSV(text) {
-      const lines = text.trim().split('\n');
+
+    function parseCalendrierCSV(text) {
+      const lines = splitCSVLines(text);
       if (lines.length < 2) return [];
       
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^"(.*)"$/, '').replace(/^﻿/, ''));
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"(.*)"$/, '$1').replace(/^﻿/, ''));
       const data = [];
 
       for (let i = 1; i < lines.length; i++) {
-        const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, ''));
+        const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'));
         if (row.length < headers.length) continue;
 
         let obj = {};
@@ -342,16 +339,13 @@
             date: date,
             time: time,
             stadium: stadium === "#N/A" ? "Stade non renseigné" : stadium,
-            referee: referee === "#N/A" ? "" : referee,
-            contactHome: "Contact club hôte",
-            contactAway: "Contact club visiteur"
+            referee: referee === "#N/A" ? "" : referee
           });
         }
       }
       return data;
     }
 
-    // 2. Gestion de la classe CSS par division
     function getDivisionClass(div) {
       switch(div.toUpperCase()) {
         case 'D2': return 'd2';
@@ -363,7 +357,6 @@
       }
     }
 
-    // 3. Remplissage des filtres d'arbitres
     function populateRefFilter() {
       const select = document.getElementById('ref-filter');
       select.innerHTML = `
@@ -386,7 +379,6 @@
       });
     }
 
-    // 4. Affichage des vues (Tableau et Cartes)
     function renderViews(filteredMatches) {
       const tableBody = document.getElementById('table-body');
       const cardsContainer = document.getElementById('cards-container');
@@ -397,7 +389,7 @@
       contactMatchSelect.innerHTML = '';
 
       if (filteredMatches.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 20px; color: var(--text-muted);">Aucun match trouvé.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 20px; color: var(--text-muted);">Aucun match trouvé.</td></tr>`;
         return;
       }
 
@@ -409,7 +401,7 @@
         const homeContact = getTeamContactHtml(m.home);
         const awayContact = getTeamContactHtml(m.away);
 
-        // Ligne Tableau
+        // 1. Ligne Tableau (Sans la colonne contacts équipes)
         const tr = document.createElement('tr');
         tr.className = `row-${divClass}`;
         tr.innerHTML = `
@@ -419,14 +411,10 @@
           <td><strong>${m.home}</strong> vs <strong>${m.away}</strong></td>
           <td>${m.stadium}</td>
           <td>${refDisplay}</td>
-          <td>
-            <div class="contact-block"><strong>Locaux :</strong> ${homeContact}</div>
-            <div class="contact-block"><strong>Visiteurs :</strong> ${awayContact}</div>
-          </td>
         `;
         tableBody.appendChild(tr);
 
-        // Carte
+        // 2. Carte (Avec les contacts dynamiques des équipes)
         const card = document.createElement('div');
         card.className = `card-match card-${divClass}`;
         card.innerHTML = `
@@ -459,7 +447,6 @@
       });
     }
 
-    // 5. Filtrage
     function applyFilter(value) {
       let filtered = matchesData;
       if (value === 'UNASSIGNED') {
@@ -470,7 +457,6 @@
       renderViews(filtered);
     }
 
-    // 6. Navigation par onglets
     function switchTab(tabId, btnElement) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
@@ -495,7 +481,6 @@
       }
     }
 
-    // 7. Envoi de mail
     function sendEmail(e) {
       e.preventDefault();
       const adminEmail = "crasudouest@gmail.com";
@@ -515,10 +500,8 @@
       window.location.href = `mailto:${adminEmail}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
     }
 
-   // 8- Chargement simultané des Équipes et du Calendrier
     async function loadCalendarData() {
       try {
-        // 1. Charger l'onglet Équipe
         if (GOOGLE_SHEETS_EQUIPE_URL) {
           try {
             const respEquipes = await fetch(GOOGLE_SHEETS_EQUIPE_URL);
@@ -531,8 +514,7 @@
           }
         }
 
-        // 2. Charger l'onglet Calendrier
-        const response = await fetch(GOOGLE_SHEETS_CALENDRIER_URL);
+        const response = await fetch(GOOGLE_SHEETS_CSV_URL);
         if (!response.ok) throw new Error("Erreur réseau HTTP");
         
         const csvText = await response.text();
@@ -549,7 +531,6 @@
       }
     }
 
-    // Lancement au chargement complet du DOM
     document.addEventListener('DOMContentLoaded', loadCalendarData);
   </script>
 </body>
