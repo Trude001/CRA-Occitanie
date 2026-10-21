@@ -278,6 +278,7 @@
         </svg>
         Non attribué
       </span>`;
+    
     // Analyse du fichier CSV
 function parseCSV(text) {
   const lines = text.trim().split('\n');
@@ -294,16 +295,16 @@ function parseCSV(text) {
 
     // Association par colonne Google Sheets
     // Adaptez les noms si vos colonnes Google Sheets diffèrent
-    const date = row[3] || "";
-    const division = row[4] || "";
-    const time = row[5] || "";
-    const home = row[6] || "";
-    const away = row[7] || "";
-    const stadium = row[8] || "";
-    const referee = row[9] || "";
+    const date = obj['Date'] || "";
+    const division = obj['Division'] || "";
+    const time = obj['Heure Kick-off'] || "";
+    const home = obj['Locaux'] || "";
+    const away = obj['Visiteurs'] || "";
+    const stadium = obj['Lieu rencontre'] || "";
+    const referee = obj['Arbitre désigné'] || "";
 
     // On ne conserve que les lignes correspondant à un vrai match
-    if (home !== "" && home !== "Locaux") {
+    if (home && home !== "" && home !== "#N/A" && home !== "Locaux") {
       data.push({
         id: i,
         division: division || "D2",
@@ -311,8 +312,8 @@ function parseCSV(text) {
         away: away,
         date: date,
         time: time,
-        stadium: stadium,
-        referee: referee,
+        stadium: stadium === "#N/A" ? "Stade non renseigné" : stadium,
+        referee: referee === "#N/A" ? "" : referee,
         contactHome: "Contact club hôte",
         contactAway: "Contact club visiteur"
       });
@@ -321,31 +322,47 @@ function parseCSV(text) {
   return data;
 }
 
-// Chargement et rafraîchissement dynamique des données
-async function loadCalendarData() {
-  if (!GOOGLE_SHEETS_CSV_URL) {
-    // Si pas d'URL configurée, charger les données de test
-    populateRefFilter();
-    renderViews(matchesData);
-    return;
-  }
+// Chargement asynchrone avec gestion d'erreur et repli
+    async function loadCalendarData() {
+      try {
+        const response = await fetch(GOOGLE_SHEETS_CSV_URL);
+        if (!response.ok) throw new Error("Erreur réseau HTTP");
+        
+        const csvText = await response.text();
+        const fetchedMatches = parseCSV(csvText);
 
-  try {
-    const response = await fetch(GOOGLE_SHEETS_CSV_URL);
-    const csvText = await response.text();
-    const fetchedMatches = parseCSV(csvText);
-
-    if (fetchedMatches.length > 0) {
-      matchesData = fetchedMatches;
+        if (fetchedMatches.length > 0) {
+          matchesData = fetchedMatches;
+        }
+      } catch (err) {
+        console.warn("Impossible de charger Google Sheets (CORS ou URL invalide), utilisation des données de secours.", err);
+      } finally {
+        populateRefFilter();
+        renderViews(matchesData);
+      }
     }
-  } catch (err) {
-    console.warn("Erreur lors du chargement Google Sheets, repli sur données locales :", err);
-  } finally {
-    populateRefFilter();
-    renderViews(matchesData);
-  }
-}
+    function populateRefFilter() {
+          const select = document.getElementById('ref-filter');
+          // Garder les options de base
+          select.innerHTML = `
+            <option value="ALL">Tous les matchs</option>
+            <option value="UNASSIGNED">Matchs non attribués uniquement</option>
+          `;
+          
+          const referees = new Set();
+          matchesData.forEach(m => {
+            if (m.referee && m.referee.trim() !== "") {
+              referees.add(m.referee.trim());
+            }
+          });
 
+      referees.forEach(ref => {
+        const opt = document.createElement('option');
+        opt.value = ref;
+        opt.textContent = `Arbitre : ${ref}`;
+        select.appendChild(opt);
+      });
+    }
 
     // Affichage des données
     function renderViews(filteredMatches) {
@@ -454,7 +471,7 @@ async function loadCalendarData() {
     // Envoi de mail pré-rempli
     function sendEmail(e) {
       e.preventDefault();
-      const adminEmail = "cra.arbitrage@ligue-occitanie-fa.fr"; // Adresse de destination de la CRA
+      const adminEmail = "crasudouest@gmail.com"; // Adresse de destination de la CRA
       
       const name = document.getElementById('contact-name').value;
       const typeVal = document.getElementById('contact-type').value;
@@ -474,9 +491,8 @@ async function loadCalendarData() {
       window.location.href = `mailto:${adminEmail}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
     }
 // Lancement propre au chargement complet du DOM
-    document.addEventListener('DOMContentLoaded', () => {
-      loadCalendarData();
-    });
+    // Lancement au chargement
+    document.addEventListener('DOMContentLoaded', loadCalendarData);
   </script>
 </body>
 </html>
