@@ -216,23 +216,10 @@
  <script>
     // URL de votre fichier Google Sheets publié en CSV
     const GOOGLE_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRypW_JLd6gUusSfC9MG937kuKvr1sXNfbNudAI6wUnV97OPJzgMPyF37QLdUS0jin1m20_tpU0PdKs/pub?gid=1&single=true&output=csv"; 
-
+    const GOOGLE_SHEETS_EQUIPE_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRypW_JLd6gUusSfC9MG937kuKvr1sXNfbNudAI6wUnV97OPJzgMPyF37QLdUS0jin1m20_tpU0PdKs/pub?gid=642104858&single=true&output=csv";
     // Données de secours (affichées si Google Sheets est inaccessible)
-    let matchesData = [
-      {
-        id: 1,
-        division: "D2",
-        home: "Ours de Toulouse",
-        away: "Gerfauts de Montauban",
-        date: "Dimanche 18 Octobre 2026",
-        time: "14:00",
-        stadium: "Stade des Argoulets, Toulouse",
-        referee: "Jean Dupont",
-        contactHome: "contact@ourstoulouse.com | 06 11 22 33 44",
-        contactAway: "bureau@gerfauts.fr | 06 99 88 77 66"
-      }
-    ];
-
+    let matchesData = [ ];
+    let teamsContactMap = {};
     // SVG de l'icône Buste d'homme barré (Match sans arbitre)
     const iconNoRef = `
       <span class="no-ref-badge" title="Aucun arbitre désigné">
@@ -241,7 +228,86 @@
         </svg>
         Non attribué
       </span>`;
+    // Analyse générique d'un texte CSV en lignes
+    function splitCSVLines(text) {
+      return text.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    }
 
+    // Analyse de la grille d'équipes (où les noms d'équipes sont en colonnes)
+    function parseEquipesCSV(csvText) {
+      const lines = splitCSVLines(csvText);
+      if (lines.length < 2) return {};
+
+      const map = {};
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"(.*)"$/, '$1').replace(/^﻿/, ''));
+
+      // Index 0: Equipe (Adresse, Personne, Mail, Tel)
+      // On va repérer la ligne 'Peronnse à contacter équipe', 'Mail équipe', 'Tel Equipe'
+      let nameRowIdx = -1, mailRowIdx = -1, telRowIdx = -1;
+
+      for (let i = 1; i < lines.length; i++) {
+        const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'));
+        const label = row[0] ? row[0].toLowerCase() : "";
+        
+        if (label.includes('contact') || label.includes('personne') || label.includes('peronnse')) nameRowIdx = i;
+        else if (label.includes('mail')) mailRowIdx = i;
+        else if (label.includes('tel')) telRowIdx = i;
+      }
+
+      // Parcourir chaque colonne d'équipe
+      for (let col = 1; col < headers.length; col++) {
+        const teamName = headers[col];
+        if (!teamName) continue;
+
+        let contactName = "", mail = "", tel = "";
+
+        if (nameRowIdx !== -1) {
+          const row = lines[nameRowIdx].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'));
+          contactName = row[col] || "";
+        }
+        if (mailRowIdx !== -1) {
+          const row = lines[mailRowIdx].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'));
+          mail = row[col] || "";
+        }
+        if (telRowIdx !== -1) {
+          const row = lines[telRowIdx].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'));
+          tel = row[col] || "";
+        }
+
+        // Nettoyage des valeurs invalides
+        if (contactName === "#N/A") contactName = "";
+        if (mail === "#N/A") mail = "";
+        if (tel === "#N/A") tel = "";
+
+        map[teamName.toLowerCase()] = {
+          nom: contactName,
+          mail: mail,
+          tel: tel
+        };
+      }
+      return map;
+    }
+
+    // Recherche souple du contact d'une équipe par son nom
+    function getTeamContactHtml(teamName) {
+      if (!teamName) return "<em>Non renseigné</em>";
+      
+      const cleanName = teamName.toLowerCase().trim();
+      let foundKey = Object.keys(teamsContactsMap).find(k => k === cleanName || k.includes(cleanName) || cleanName.includes(k));
+
+      if (!foundKey) {
+        return `<strong>${teamName}</strong> : <em>Contact non renseigné</em>`;
+      }
+
+      const c = teamsContactsMap[foundKey];
+      const nomStr = c.nom ? `👤 ${c.nom}` : '';
+      const mailStr = c.mail ? `✉️ <a href="mailto:${c.mail}">${c.mail}</a>` : '';
+      const telStr = c.tel ? `📞 ${c.tel}` : '';
+
+      const details = [nomStr, mailStr, telStr].filter(x => x !== '').join(' | ');
+
+      return details ? `<strong>${teamName}</strong> : ${details}` : `<strong>${teamName}</strong> : <em>Non renseigné</em>`;
+    }
     // 1. Analyse robuste du CSV
     function parseCSV(text) {
       const lines = text.trim().split('\n');
@@ -340,6 +406,9 @@
         const hasRef = m.referee && m.referee.trim() !== "";
         const refDisplay = hasRef ? `<strong>${m.referee}</strong>` : iconNoRef;
 
+        const homeContact = getTeamContactHtml(m.home);
+        const awayContact = getTeamContactHtml(m.away);
+
         // Ligne Tableau
         const tr = document.createElement('tr');
         tr.className = `row-${divClass}`;
@@ -351,8 +420,8 @@
           <td>${m.stadium}</td>
           <td>${refDisplay}</td>
           <td>
-            <small style="display:block;"><strong>Locaux :</strong> ${m.contactHome}</small>
-            <small style="display:block;"><strong>Visiteurs :</strong> ${m.contactAway}</small>
+            <div class="contact-block"><strong>Locaux :</strong> ${homeContact}</div>
+            <div class="contact-block"><strong>Visiteurs :</strong> ${awayContact}</div>
           </td>
         `;
         tableBody.appendChild(tr);
@@ -374,14 +443,13 @@
             </div>
           </div>
           <div class="card-contact">
-            <div style="font-weight:600; margin-bottom:2px;">Contacts :</div>
-            <div><strong>Locaux :</strong> ${m.contactHome}</div>
-            <div><strong>Visiteurs :</strong> ${m.contactAway}</div>
+            <div style="font-weight:600; margin-bottom:4px;">Contacts des équipes :</div>
+            <div style="margin-bottom: 4px;">${homeContact}</div>
+            <div>${awayContact}</div>
           </div>
         `;
         cardsContainer.appendChild(card);
 
-        // Liste pour le formulaire de contact
         if (!hasRef) {
           const opt = document.createElement('option');
           opt.value = `${m.home} vs ${m.away} (${m.date})`;
@@ -447,20 +515,34 @@
       window.location.href = `mailto:${adminEmail}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
     }
 
-    // 8. Chargement principal asynchrone Google Sheets
+   // 8- Chargement simultané des Équipes et du Calendrier
     async function loadCalendarData() {
       try {
-        const response = await fetch(GOOGLE_SHEETS_CSV_URL);
+        // 1. Charger l'onglet Équipe
+        if (GOOGLE_SHEETS_EQUIPE_URL) {
+          try {
+            const respEquipes = await fetch(GOOGLE_SHEETS_EQUIPE_URL);
+            if (respEquipes.ok) {
+              const csvEquipes = await respEquipes.text();
+              teamsContactsMap = parseEquipesCSV(csvEquipes);
+            }
+          } catch (e) {
+            console.warn("Erreur de chargement des contacts équipes", e);
+          }
+        }
+
+        // 2. Charger l'onglet Calendrier
+        const response = await fetch(GOOGLE_SHEETS_CALENDRIER_URL);
         if (!response.ok) throw new Error("Erreur réseau HTTP");
         
         const csvText = await response.text();
-        const fetchedMatches = parseCSV(csvText);
+        const fetchedMatches = parseCalendrierCSV(csvText);
 
         if (fetchedMatches.length > 0) {
           matchesData = fetchedMatches;
         }
       } catch (err) {
-        console.warn("Impossible de charger Google Sheets, utilisation des données de secours.", err);
+        console.warn("Impossible de charger Google Sheets", err);
       } finally {
         populateRefFilter();
         renderViews(matchesData);
