@@ -236,6 +236,31 @@
       return text.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
     }
 
+    // Formater un numéro de téléphone brut ou notation scientifique (ex: 6.15124e+08 -> 06 15 12 40 00)
+    function formatPhoneNumber(rawTel) {
+      if (!rawTel || rawTel === "#N/A") return "";
+      let str = rawTel.toString().trim();
+      
+      // Si notation scientifique
+      if (str.includes('e') || str.includes('E')) {
+        let num = Number(str);
+        if (!isNaN(num)) str = Math.round(num).toString();
+      }
+      
+      // Nettoyer les caractères non numériques
+      let cleaned = str.replace(/\D/g, '');
+      if (cleaned.length === 9 && !cleaned.startsWith('0')) {
+        cleaned = '0' + cleaned;
+      }
+      
+      // Formater par paquets de 2 chiffres
+      if (cleaned.length === 10) {
+        return cleaned.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, '$1 $2 $3 $4 $5');
+      }
+      return rawTel; // Si format spécifique
+    }
+
+    // Analyse de la grille d'équipes dans Google Sheets
     function parseEquipesCSV(csvText) {
       const lines = splitCSVLines(csvText);
       if (lines.length < 2) return {};
@@ -255,8 +280,8 @@
       }
 
       for (let col = 1; col < headers.length; col++) {
-        const teamName = headers[col];
-        if (!teamName) continue;
+        const teamHeader = headers[col];
+        if (!teamHeader) continue;
 
         let contactName = "", mail = "", tel = "";
 
@@ -277,33 +302,41 @@
         if (mail === "#N/A") mail = "";
         if (tel === "#N/A") tel = "";
 
-        map[teamName.toLowerCase()] = {
+        map[teamHeader.toLowerCase()] = {
           nom: contactName,
           mail: mail,
-          tel: tel
+          tel: formatPhoneNumber(tel)
         };
       }
       return map;
     }
 
+    // Recherche intelligente du contact par nom de club
     function getTeamContactHtml(teamName) {
       if (!teamName) return "<em>Non renseigné</em>";
       
       const cleanName = teamName.toLowerCase().trim();
-      let foundKey = Object.keys(teamsContactsMap).find(k => k === cleanName || k.includes(cleanName) || cleanName.includes(k));
+      
+      // Extraction du premier mot principal du club (ex: "Gerfauts", "Ours", "Comètes", "Hurricanes")
+      const words = cleanName.replace(/[^a-z0-9\s]/gi, '').split(' ').filter(w => w.length > 2 && w !== 'mfa');
 
-      if (!foundKey) {
-        return `<strong>${teamName}</strong> : <em>Contact non renseigné</em>`;
+      let foundKey = Object.keys(teamsContactsMap).find(k => {
+        if (k === cleanName) return true;
+        return words.some(word => k.includes(word));
+      });
+
+      let contactName = "Personne non désignée";
+      let mailStr = "Mail non renseigné";
+      let telStr = "Tel non renseigné";
+
+      if (foundKey) {
+        const c = teamsContactsMap[foundKey];
+        if (c.nom && c.nom.trim() !== "") contactName = c.nom.trim();
+        if (c.mail && c.mail.trim() !== "") mailStr = `<a href="mailto:${c.mail.trim()}">${c.mail.trim()}</a>`;
+        if (c.tel && c.tel.trim() !== "") telStr = c.tel.trim();
       }
 
-      const c = teamsContactsMap[foundKey];
-      const nomStr = c.nom ? `👤 ${c.nom}` : '';
-      const mailStr = c.mail ? `✉️ <a href="mailto:${c.mail}">${c.mail}</a>` : '';
-      const telStr = c.tel ? `📞 ${c.tel}` : '';
-
-      const details = [nomStr, mailStr, telStr].filter(x => x !== '').join(' | ');
-
-      return details ? `<strong>${teamName}</strong> : ${details}` : `<strong>${teamName}</strong> : <em>Non renseigné</em>`;
+      return `<strong>${teamName}</strong> : 👤 ${contactName} | ✉️ ${mailStr} | 📞 ${telStr}`;
     }
 
     function parseCalendrierCSV(text) {
