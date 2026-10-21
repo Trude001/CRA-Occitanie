@@ -213,12 +213,11 @@
     </section>
   </main>
 
-  <script>
-    // SCRIPT DE SYNCHRONISATION GOOGLE SHEETS
-    // Remplacer l'URL ci-dessous par l'URL d'export CSV de votre feuille Google Sheets publiée
+ <script>
+    // URL de votre fichier Google Sheets publié en CSV
     const GOOGLE_SHEETS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRypW_JLd6gUusSfC9MG937kuKvr1sXNfbNudAI6wUnV97OPJzgMPyF37QLdUS0jin1m20_tpU0PdKs/pub?gid=1&single=true&output=csv"; 
 
-    // Données de démonstration (utilisées par défaut avant connexion au Google Sheet)
+    // Données de secours (affichées si Google Sheets est inaccessible)
     let matchesData = [
       {
         id: 1,
@@ -231,42 +230,6 @@
         referee: "Jean Dupont",
         contactHome: "contact@ourstoulouse.com | 06 11 22 33 44",
         contactAway: "bureau@gerfauts.fr | 06 99 88 77 66"
-      },
-      {
-        id: 2,
-        division: "Régional",
-        home: "Comètes de Montrabé",
-        away: "Centurions de Nîmes",
-        date: "Samedi 24 Octobre 2026",
-        time: "18:00",
-        stadium: "Complexe Sportif, Montrabé",
-        referee: "", // Non attribué
-        contactHome: "cometes@gmail.com | 06 12 00 11 22",
-        contactAway: "nimes.centurions@fffa.org | 04 66 00 11 22"
-      },
-      {
-        id: 3,
-        division: "U18",
-        home: "Hurricanes de Montpellier",
-        away: "Lions de Bordeaux",
-        date: "Dimanche 25 Octobre 2026",
-        time: "14:00",
-        stadium: "Stade Sabathé, Montpellier",
-        referee: "Thomas Martin",
-        contactHome: "contact@hurricanes.fr | 06 55 44 33 22",
-        contactAway: "contact@lions.fr | 05 56 00 11 22"
-      },
-      {
-        id: 4,
-        division: "U16",
-        home: "Sphinx de Pau",
-        away: "Ours de Toulouse",
-        date: "Samedi 31 Octobre 2026",
-        time: "15:00",
-        stadium: "Stade André Lavie, Pau",
-        referee: "", // Non attribué
-        contactHome: "sphinx.pau@gmail.com | 06 40 50 60 70",
-        contactAway: "contact@ourstoulouse.com | 06 11 22 33 44"
       }
     ];
 
@@ -278,83 +241,76 @@
         </svg>
         Non attribué
       </span>`;
-    
-    // Analyse du fichier CSV
-function parseCSV(text) {
-  const lines = text.trim().split('\n');
-  if (lines.length < 2) return [];
-  
-  // Récupération des en-têtes
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"(.*)"$/, '$1'));
-  const data = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    // Gestion des guillemets dans le CSV
-    const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'));
-    if (row.length < headers.length) continue;
+    // 1. Analyse robuste du CSV
+    function parseCSV(text) {
+      const lines = text.trim().split('\n');
+      if (lines.length < 2) return [];
+      
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"(.*)"$/, '').replace(/^﻿/, ''));
+      const data = [];
 
-    // Association par colonne Google Sheets
-    // Adaptez les noms si vos colonnes Google Sheets diffèrent
-    const date = obj['Date'] || "";
-    const division = obj['Division'] || "";
-    const time = obj['Heure Kick-off'] || "";
-    const home = obj['Locaux'] || "";
-    const away = obj['Visiteurs'] || "";
-    const stadium = obj['Lieu rencontre'] || "";
-    const referee = obj['Arbitre désigné'] || "";
+      for (let i = 1; i < lines.length; i++) {
+        const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, ''));
+        if (row.length < headers.length) continue;
 
-    // On ne conserve que les lignes correspondant à un vrai match
-    if (home && home !== "" && home !== "#N/A" && home !== "Locaux") {
-      data.push({
-        id: i,
-        division: division || "D2",
-        home: home,
-        away: away,
-        date: date,
-        time: time,
-        stadium: stadium === "#N/A" ? "Stade non renseigné" : stadium,
-        referee: referee === "#N/A" ? "" : referee,
-        contactHome: "Contact club hôte",
-        contactAway: "Contact club visiteur"
-      });
-    }
-  }
-  return data;
-}
+        let obj = {};
+        headers.forEach((h, index) => {
+          obj[h] = row[index] || "";
+        });
 
-// Chargement asynchrone avec gestion d'erreur et repli
-    async function loadCalendarData() {
-      try {
-        const response = await fetch(GOOGLE_SHEETS_CSV_URL);
-        if (!response.ok) throw new Error("Erreur réseau HTTP");
-        
-        const csvText = await response.text();
-        const fetchedMatches = parseCSV(csvText);
+        const date = obj['Date'] || "";
+        const division = obj['Division'] || "";
+        const time = obj['Heure Kick-off'] || "";
+        const home = obj['Locaux'] || "";
+        const away = obj['Visiteurs'] || "";
+        const stadium = obj['Lieu rencontre'] || "";
+        const referee = obj['Arbitre désigné'] || "";
 
-        if (fetchedMatches.length > 0) {
-          matchesData = fetchedMatches;
+        if (home && home !== "" && home !== "#N/A" && home !== "Locaux") {
+          data.push({
+            id: i,
+            division: division || "D2",
+            home: home,
+            away: away,
+            date: date,
+            time: time,
+            stadium: stadium === "#N/A" ? "Stade non renseigné" : stadium,
+            referee: referee === "#N/A" ? "" : referee,
+            contactHome: "Contact club hôte",
+            contactAway: "Contact club visiteur"
+          });
         }
-      } catch (err) {
-        console.warn("Impossible de charger Google Sheets (CORS ou URL invalide), utilisation des données de secours.", err);
-      } finally {
-        populateRefFilter();
-        renderViews(matchesData);
+      }
+      return data;
+    }
+
+    // 2. Gestion de la classe CSS par division
+    function getDivisionClass(div) {
+      switch(div.toUpperCase()) {
+        case 'D2': return 'd2';
+        case 'RÉGIONAL': 
+        case 'REGIONAL': return 'regional';
+        case 'U18': return 'u18';
+        case 'U16': return 'u16';
+        default: return 'd2';
       }
     }
+
+    // 3. Remplissage des filtres d'arbitres
     function populateRefFilter() {
-          const select = document.getElementById('ref-filter');
-          // Garder les options de base
-          select.innerHTML = `
-            <option value="ALL">Tous les matchs</option>
-            <option value="UNASSIGNED">Matchs non attribués uniquement</option>
-          `;
-          
-          const referees = new Set();
-          matchesData.forEach(m => {
-            if (m.referee && m.referee.trim() !== "") {
-              referees.add(m.referee.trim());
-            }
-          });
+      const select = document.getElementById('ref-filter');
+      select.innerHTML = `
+        <option value="ALL">Tous les matchs</option>
+        <option value="UNASSIGNED">Matchs non attribués uniquement</option>
+      `;
+      
+      const referees = new Set();
+      matchesData.forEach(m => {
+        if (m.referee && m.referee.trim() !== "") {
+          referees.add(m.referee.trim());
+        }
+      });
 
       referees.forEach(ref => {
         const opt = document.createElement('option');
@@ -364,7 +320,7 @@ function parseCSV(text) {
       });
     }
 
-    // Affichage des données
+    // 4. Affichage des vues (Tableau et Cartes)
     function renderViews(filteredMatches) {
       const tableBody = document.getElementById('table-body');
       const cardsContainer = document.getElementById('cards-container');
@@ -374,12 +330,17 @@ function parseCSV(text) {
       cardsContainer.innerHTML = '';
       contactMatchSelect.innerHTML = '';
 
+      if (filteredMatches.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 20px; color: var(--text-muted);">Aucun match trouvé.</td></tr>`;
+        return;
+      }
+
       filteredMatches.forEach(m => {
         const divClass = getDivisionClass(m.division);
         const hasRef = m.referee && m.referee.trim() !== "";
         const refDisplay = hasRef ? `<strong>${m.referee}</strong>` : iconNoRef;
 
-        // 1. Rendu Ligne du Tableau
+        // Ligne Tableau
         const tr = document.createElement('tr');
         tr.className = `row-${divClass}`;
         tr.innerHTML = `
@@ -396,7 +357,7 @@ function parseCSV(text) {
         `;
         tableBody.appendChild(tr);
 
-        // 2. Rendu Vignette / Carte
+        // Carte
         const card = document.createElement('div');
         card.className = `card-match card-${divClass}`;
         card.innerHTML = `
@@ -420,7 +381,7 @@ function parseCSV(text) {
         `;
         cardsContainer.appendChild(card);
 
-        // Populer la liste pour le formulaire si le match n'a pas d'arbitre
+        // Liste pour le formulaire de contact
         if (!hasRef) {
           const opt = document.createElement('option');
           opt.value = `${m.home} vs ${m.away} (${m.date})`;
@@ -430,7 +391,7 @@ function parseCSV(text) {
       });
     }
 
-    // Filtrage
+    // 5. Filtrage
     function applyFilter(value) {
       let filtered = matchesData;
       if (value === 'UNASSIGNED') {
@@ -441,7 +402,7 @@ function parseCSV(text) {
       renderViews(filtered);
     }
 
-    // Navigation par onglets
+    // 6. Navigation par onglets
     function switchTab(tabId, btnElement) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
@@ -449,7 +410,6 @@ function parseCSV(text) {
       document.getElementById(tabId).classList.add('active');
       btnElement.classList.add('active');
 
-      // Masquer le filtre sur l'onglet contact
       const filterWrapper = document.getElementById('filter-wrapper');
       if (tabId === 'tab-contact') {
         filterWrapper.style.visibility = 'hidden';
@@ -458,7 +418,6 @@ function parseCSV(text) {
       }
     }
 
-    // Afficher/masquer la liste des matchs dans le formulaire contact
     function toggleMatchSelect(val) {
       const matchGroup = document.getElementById('match-select-group');
       if (val === 'ASSIGN') {
@@ -468,11 +427,10 @@ function parseCSV(text) {
       }
     }
 
-    // Envoi de mail pré-rempli
+    // 7. Envoi de mail
     function sendEmail(e) {
       e.preventDefault();
-      const adminEmail = "crasudouest@gmail.com"; // Adresse de destination de la CRA
-      
+      const adminEmail = "cra.arbitrage@ligue-occitanie-fa.fr";
       const name = document.getElementById('contact-name').value;
       const typeVal = document.getElementById('contact-type').value;
       const typeText = typeVal === 'UNAVAIL' ? "Déclaration d'indisponibilité" : "Demande d'arbitrage de match";
@@ -481,17 +439,35 @@ function parseCSV(text) {
 
       const subject = encodeURIComponent(`[CRA Arbitrage] ${typeText} - ${name}`);
       let bodyText = `Bonjour,\n\nNom de l'arbitre : ${name}\nDemande : ${typeText}\n`;
-      
       if (typeVal === 'ASSIGN' && matchVal) {
         bodyText += `Match souhaité : ${matchVal}\n`;
       }
-      
       bodyText += `\nPrécisions / Message :\n${details}\n\nCordialement,`;
 
       window.location.href = `mailto:${adminEmail}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
     }
-// Lancement propre au chargement complet du DOM
-    // Lancement au chargement
+
+    // 8. Chargement principal asynchrone Google Sheets
+    async function loadCalendarData() {
+      try {
+        const response = await fetch(GOOGLE_SHEETS_CSV_URL);
+        if (!response.ok) throw new Error("Erreur réseau HTTP");
+        
+        const csvText = await response.text();
+        const fetchedMatches = parseCSV(csvText);
+
+        if (fetchedMatches.length > 0) {
+          matchesData = fetchedMatches;
+        }
+      } catch (err) {
+        console.warn("Impossible de charger Google Sheets, utilisation des données de secours.", err);
+      } finally {
+        populateRefFilter();
+        renderViews(matchesData);
+      }
+    }
+
+    // Lancement au chargement complet du DOM
     document.addEventListener('DOMContentLoaded', loadCalendarData);
   </script>
 </body>
