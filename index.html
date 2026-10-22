@@ -266,43 +266,34 @@
       if (lines.length < 2) return {};
 
       const map = {};
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^"(.*)"$/, '$1').replace(/^﻿/, ''));
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"(.*)"$/, '$1').replace(/^﻿/, '').toLowerCase());
 
-      let nameRowIdx = -1, mailRowIdx = -1, telRowIdx = -1;
+      // Repérer les index des colonnes par leurs en-têtes
+      let teamColIdx = 0;
+      let nameColIdx = -1;
+      let mailColIdx = -1;
+      let telColIdx = -1;
 
+      headers.forEach((h, idx) => {
+        if (h.includes('equipe') || h.includes('club')) teamColIdx = idx;
+        else if (h.includes('contact') || h.includes('personne') || h.includes('responsable')) nameColIdx = idx;
+        else if (h.includes('mail') || h.includes('courriel')) mailColIdx = idx;
+        else if (h.includes('tel') || h.includes('telephone')) telColIdx = idx;
+      });
+
+      // Parcourir chaque ligne (chaque équipe)
       for (let i = 1; i < lines.length; i++) {
         const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'));
-        const label = row[0] ? row[0].toLowerCase() : "";
-        
-        if (label.includes('contact') || label.includes('personne') || label.includes('peronnse')) nameRowIdx = i;
-        else if (label.includes('mail')) mailRowIdx = i;
-        else if (label.includes('tel')) telRowIdx = i;
-      }
+        if (row.length <= teamColIdx) continue;
 
-      for (let col = 1; col < headers.length; col++) {
-        const teamHeader = headers[col];
-        if (!teamHeader) continue;
+        const teamName = row[teamColIdx];
+        if (!teamName || teamName === "#N/A" || teamName === "") continue;
 
-        let contactName = "", mail = "", tel = "";
+        const contactName = (nameColIdx !== -1 && row[nameColIdx] && row[nameColIdx] !== "#N/A") ? row[nameColIdx] : "";
+        const mail = (mailColIdx !== -1 && row[mailColIdx] && row[mailColIdx] !== "#N/A") ? row[mailColIdx] : "";
+        const tel = (telColIdx !== -1 && row[telColIdx] && row[telColIdx] !== "#N/A") ? row[telColIdx] : "";
 
-        if (nameRowIdx !== -1) {
-          const row = lines[nameRowIdx].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'));
-          contactName = row[col] || "";
-        }
-        if (mailRowIdx !== -1) {
-          const row = lines[mailRowIdx].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'));
-          mail = row[col] || "";
-        }
-        if (telRowIdx !== -1) {
-          const row = lines[telRowIdx].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(cell => cell.trim().replace(/^"(.*)"$/, '$1'));
-          tel = row[col] || "";
-        }
-
-        if (contactName === "#N/A") contactName = "";
-        if (mail === "#N/A") mail = "";
-        if (tel === "#N/A") tel = "";
-
-        map[teamHeader.toLowerCase()] = {
+        map[teamName.toLowerCase()] = {
           nom: contactName,
           mail: mail,
           tel: formatPhoneNumber(tel)
