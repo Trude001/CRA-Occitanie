@@ -511,17 +511,31 @@
       const name = document.getElementById('contact-name').value;
       const typeVal = document.getElementById('contact-type').value;
       const typeText = typeVal === 'UNAVAIL' ? "Déclaration d'indisponibilité" : "Demande d'arbitrage de match";
-      const matchVal = document.getElementById('contact-match').value;
+      
+      const matchSelect = document.getElementById('match-select-group');
+      let matchVal = "";
+      if (matchSelect && matchSelect.style.display !== 'none') {
+        const matchDropdown = document.getElementById('contact-match');
+        if (matchDropdown) matchVal = matchDropdown.value;
+      }
+      
       const details = document.getElementById('contact-details').value;
 
-      const subject = encodeURIComponent(`[CRA Arbitrage] ${typeText} - ${name}`);
+      const subject = encodeURIComponent(`[Désignation ou Indispo] ${typeText} - ${name}`);
       let bodyText = `Bonjour,\n\nNom de l'arbitre : ${name}\nDemande : ${typeText}\n`;
       if (typeVal === 'ASSIGN' && matchVal) {
         bodyText += `Match souhaité : ${matchVal}\n`;
       }
       bodyText += `\nPrécisions / Message :\n${details}\n\nCordialement,`;
 
-      window.location.href = `mailto:${adminEmail}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+      // Création du lien mailto sécurisé
+      const mailtoLink = `mailto:${adminEmail}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+
+      // Ouvre le client mail ou propose de copier le texte
+      window.location.href = mailtoLink;
+      
+      // Message de confirmation visuel pour l'utilisateur
+      alert("Votre client de messagerie va s'ouvrir pour envoyer l'e-mail à " + adminEmail + ".\nSi rien ne s'ouvre, veuillez envoyer directement votre demande à cette adresse.");
     }
 
     async function loadCalendarData() {
